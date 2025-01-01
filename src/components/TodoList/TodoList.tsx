@@ -4,16 +4,17 @@ import TodoItem from '../TodoItem/TodoItem';
 
 type Props = {
   todos: Todo[];
-  handleDeleteTodo: (todoId: number) => void;
+  handleDeleteTodo: (todoId: number, onFail: () => void) => void;
   tempTodo?: Todo | null;
   loading?: boolean;
-  handleUpdateTodo: (updatedTodo: Todo) => void;
+  handleUpdateTodo: (updatedTodo: Todo, onFail: () => void) => void;
   loadingTodoId: number | null;
   handleToggleTodo: (todoId: number,  todo: Todo) => void;
-  // completedAll?: boolean;
+  toggleId? : number | null;
+  updatingTodos: number[];
 };
 
-const TodoList: React.FC<Props> = React.memo(({ todos, handleDeleteTodo, tempTodo, loading = false, handleUpdateTodo, loadingTodoId, handleToggleTodo }) => {
+const TodoList: React.FC<Props> = React.memo(({ todos, handleDeleteTodo, tempTodo, loading = false, handleUpdateTodo, loadingTodoId, handleToggleTodo, toggleId, updatingTodos }) => {
 
   return (
     <section className="todoapp__main" data-cy="TodoList">
@@ -27,7 +28,8 @@ const TodoList: React.FC<Props> = React.memo(({ todos, handleDeleteTodo, tempTod
             handleUpdateTodo={handleUpdateTodo}
             loadingTodoId={loadingTodoId}
             handleToggleTodo={handleToggleTodo}
-            // completedAll={completedAll}
+            toggleId={toggleId}
+            updatingTodos={updatingTodos}
           />)}
 
       {tempTodo && (
@@ -38,6 +40,7 @@ const TodoList: React.FC<Props> = React.memo(({ todos, handleDeleteTodo, tempTod
           handleUpdateTodo={() => { }}
           loadingTodoId={loadingTodoId}
           handleToggleTodo= {() => { }}
+          updatingTodos={updatingTodos}
         />
       )}
     </section>

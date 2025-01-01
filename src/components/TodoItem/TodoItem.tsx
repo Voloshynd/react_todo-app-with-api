@@ -1,58 +1,85 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Todo } from '../../types/Todo';
 import cn from 'classnames';
 
 type Props = {
   todo: Todo;
-  handleDeleteTodo: (todoId: number) => void;
+  handleDeleteTodo: (todoId: number, onFail: () => void) => void;
   loading?: boolean;
-  handleUpdateTodo: (updatedTodo: Todo) => void;
+  handleUpdateTodo: (updatedTodo: Todo, onFail: () => void) => void;
   loadingTodoId: number | null;
   handleToggleTodo: (todoId: number, todo: Todo) => void;
-  // completedAll?: boolean
+  toggleId?: number | null;
+  updatingTodos: number[];
 };
 
-const TodoItem: React.FC<Props> = React.memo(({ todo, handleDeleteTodo, loading = false, handleUpdateTodo, loadingTodoId, handleToggleTodo }) => {
-
+const TodoItem: React.FC<Props> = React.memo(({ todo, handleDeleteTodo, loading = false, handleUpdateTodo, loadingTodoId, handleToggleTodo, toggleId, updatingTodos }) => {
 
   const { id, title, completed } = todo;
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTodoTitle, setEditedTodoTitle] = useState(title);
-
+  const [isEditingTodo, setIsEditingTodo] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleEditTodo = () => {
     setIsEditing(true);
   };
-
+  
 
   const handleSubmitEditedTodo = useCallback(() => {
-    if (editedTodoTitle.trim()) {
-      handleUpdateTodo({ ...todo, title: editedTodoTitle });
+    const newTrimmedTitle = editedTodoTitle.trim();
+
+    if (!newTrimmedTitle) {
+      setIsEditingTodo(true);
+
+      handleDeleteTodo(id, () => {
+
+        setIsEditing(true);
+      });
+      setIsEditingTodo(false);
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (newTrimmedTitle !== title) {
+      handleUpdateTodo(
+        { ...todo, title: newTrimmedTitle },
+        () => {
+          setIsEditing(true);
+        }
+      );
     }
 
     setIsEditing(false);
-  }, [editedTodoTitle, handleUpdateTodo, id]);
-
+  }, [editedTodoTitle, handleDeleteTodo, handleUpdateTodo, id, title, todo]);
 
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleSubmitEditedTodo();
+      if (editedTodoTitle.trim() !== title) {
+        handleSubmitEditedTodo();
+      } else {
+        setIsEditing(false);
+      }
     }
   };
+
 
   const handleCancelEditTodo = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
       setIsEditing(false);
+      setEditedTodoTitle(title);
     }
   };
+
 
   const handleBlurTodo = () => {
     handleSubmitEditedTodo();
   };
+
 
   return (
     <div data-cy="Todo" className={cn("todo", { "completed": completed })}>
@@ -69,9 +96,10 @@ const TodoItem: React.FC<Props> = React.memo(({ todo, handleDeleteTodo, loading 
         />
       </label>
 
-      {isEditing || loadingTodoId === id ? (
+      {isEditing || loadingTodoId === id || isEditingTodo  ? (
         <form>
           <input
+            ref={inputRef}
             data-cy="TodoTitleField"
             type="text"
             className="todo__title-field"
@@ -101,7 +129,7 @@ const TodoItem: React.FC<Props> = React.memo(({ todo, handleDeleteTodo, loading 
             data-cy="TodoDelete"
             onClick={
               () => {
-                handleDeleteTodo(id);
+                handleDeleteTodo(id,  () => {});
                 setDeleteId(id);
               }}
             disabled={loading}
@@ -111,26 +139,21 @@ const TodoItem: React.FC<Props> = React.memo(({ todo, handleDeleteTodo, loading 
         </>
       )}
 
-
-
       {/* overlay will cover the todo while it is being deleted or updated */}
       <div data-cy="TodoLoader"
-        // className={cn("modal overlay", {
-        //   "is-active": id === 0 && loading || deleteId !== null && loading || loadingTodoId === id || completedAll,
-        // })}
         className={cn("modal overlay", {
           "is-active":
             (id === 0 && loading) ||
             (deleteId !== null && loading) ||
-            loadingTodoId === id
-            // ||  completedAll,
-
+            loadingTodoId === id ||
+            toggleId === id ||
+            isEditingTodo ||
+            updatingTodos.includes(id)
         })}
       >
         <div className="modal-background has-background-white-ter" />
         <div className="loader" />
       </div>
-
     </div>
   );
 });

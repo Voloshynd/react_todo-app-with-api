@@ -20,7 +20,7 @@ enum ErrorMessages {
   updateTodo = 'Unable to update a todo',
 }
 
-const getFilteredTodos = (todos: Todo[], filterBy: FilterType ): Todo[] => {
+const getFilteredTodos = (todos: Todo[], filterBy: FilterType): Todo[] => {
   switch (filterBy) {
     case FilterType.active:
       return todos.filter(todo => !todo.completed);
@@ -40,10 +40,10 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
   const [loadingTodoId, setLoadingTodoId] = useState<number | null>(null);
-
-  // const [completedAll, setCompletedAll] = useState(false);
-
+  const [toggleId, setToggleId] = useState<number | null>(null);
+  const [updatingTodos, setUpdatingTodos] = useState<number[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
 
   useEffect(() => {
     if (inputRef.current) {
@@ -57,16 +57,16 @@ export const App: React.FC = () => {
       .catch(() => {
         setError(ErrorMessages.loadTodos);
 
-        window.setTimeout(() => {
-          setError(null);
-        }, 3000);
+        window.setTimeout(() => setError(null), 3000);
       });
   }, []);
+
 
   useEffect(() => {
     const notCompletedTodos = todos.filter(todo => !todo.completed).length;
     setTodosCounter(notCompletedTodos);
   }, [todos]);
+
 
   const handleSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -74,9 +74,7 @@ export const App: React.FC = () => {
     if (!toBeDone.trim()) {
       setError(ErrorMessages.emptyTitle);
 
-      window.setTimeout(() => {
-        setError(null);
-      }, 3000);
+      window.setTimeout(() => setError(null), 3000);
 
       return;
     }
@@ -112,11 +110,11 @@ export const App: React.FC = () => {
           inputRef.current?.focus();
         }, 0);
 
-        window.setTimeout(() => {
-          setError(null);
-        }, 3000);
+        window.setTimeout(() => setError(null), 3000);
+
       }).finally(() => {
         setLoading(false);
+        setTempTodo(null);
       });
   }, [toBeDone, setTodos, setError]);
 
@@ -130,10 +128,11 @@ export const App: React.FC = () => {
     [handleSubmit],
   );
 
-  const handleDeleteTodo = useCallback(
-    (todoId: number) => {
 
-      setLoading(true);
+  const handleDeleteTodo = useCallback(
+    (todoId: number,  onFail: () => void) => {
+
+      setLoadingTodoId(todoId);
 
       todosServices
         .deleteTodo(todoId.toString())
@@ -145,14 +144,13 @@ export const App: React.FC = () => {
         })
         .catch(() => {
           setError(ErrorMessages.deleteTodo);
+          onFail();
 
-          window.setTimeout(() => {
-            setError(null);
-          }, 3000);
+          window.setTimeout(() => setError(null), 3000);
         })
 
         .finally(() => {
-          setLoading(false);
+          setLoadingTodoId(null);
         });
     },
     [setTodos],
@@ -175,35 +173,38 @@ export const App: React.FC = () => {
           })
           .catch(() => {
             setError(ErrorMessages.deleteTodo);
-            window.setTimeout(() => {
-              setError(null)
-            }, 3000);
+            window.setTimeout(() => setError(null), 3000);
           })
       )
     )
   }, [todos, setTodos]);
 
 
-  const handleUpdateTodo = useCallback((updatedTodo: Todo) => {
+
+  const handleUpdateTodo = useCallback((updatedTodo: Todo, onFail: () => void) => {
 
     setLoadingTodoId(updatedTodo.id);
 
     todosServices
-        .patchTodo(updatedTodo.id.toString(), updatedTodo)
-        .then(() => {
-          setTodos(currentTodos => currentTodos.map(todo => todo.id === updatedTodo.id ? updatedTodo : todo));
-        })
-        .catch(() => {
-          setError(ErrorMessages.updateTodo);
-        })
-        .finally(() => {
-          setLoadingTodoId(null)
-        });
+      .patchTodo(updatedTodo.id.toString(), updatedTodo)
+      .then(() => {
+        setTodos(currentTodos => currentTodos.map(todo => todo.id === updatedTodo.id ? updatedTodo : todo));
+        setLoadingTodoId(null);
+      })
+      .catch(() => {
+        setError(ErrorMessages.updateTodo);
+        onFail();
+
+        window.setTimeout(() => setError(null), 3000);
+      })
+      .finally(() => {
+        setLoadingTodoId(null)
+      });
   }, []);
 
 
   const handleToggleTodo = useCallback((idToBeToggled: number, todoToBeToggled: Todo) => {
-    setLoadingTodoId(idToBeToggled);
+    setToggleId(idToBeToggled);
     setLoading(true);
 
     const updatedTodo = {
@@ -219,12 +220,16 @@ export const App: React.FC = () => {
             todo.id === idToBeToggled ? updatedTodo : todo
           )
         );
+
+        setToggleId(null);
       })
       .catch(() => {
         setError(ErrorMessages.updateTodo);
+
+        window.setTimeout(() => setError(null), 3000);
       })
       .finally(() => {
-        setLoadingTodoId(null);
+        setToggleId(null);
         setLoading(false);
       });
   }, []);
@@ -232,33 +237,40 @@ export const App: React.FC = () => {
 
   const handleToggleAllTodosCompletion = useCallback(() => {
     setLoading(true);
-    // setCompletedAll(true);
 
     const allCompleted = todos.every((todo) => todo.completed);
-
-    const updatedTodos = todos.map((todo) => ({
-      ...todo,
-      completed: allCompleted ? false : true,
-    }));
-
     const todosToUpdate = todos.filter(
       (todo) => todo.completed !== (allCompleted ? false : true)
     );
 
+    setUpdatingTodos(todosToUpdate.map(todo => todo.id));
+
     Promise.all(
       todosToUpdate.map((todo) =>
-        todosServices.patchTodo(todo.id.toString(), { completed: !allCompleted })
+        todosServices
+          .patchTodo(todo.id.toString(), { completed: !allCompleted })
+          .then(() => {
+            setTodos((currentTodos) =>
+              currentTodos.map((currentTodo) =>
+                currentTodo.id === todo.id
+                  ? { ...currentTodo, completed: !allCompleted }
+                  : currentTodo
+              )
+            );
+          })
+          .catch(() => {
+            setError(ErrorMessages.updateTodo);
+            window.setTimeout(() => setError(null), 3000);
+          })
+          .finally(() => {
+            setUpdatingTodos((currentUpdatingTodos) =>
+              currentUpdatingTodos.filter(id => id !== todo.id)
+            );
+          })
       )
-    )
-      .then(() => {
-        setTodos(updatedTodos);
-      })
-      .catch(() => {
-        setError(ErrorMessages.updateTodo);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    ).finally(() => {
+      setLoading(false);
+    });
   }, [todos, setTodos]);
 
 
@@ -279,7 +291,7 @@ export const App: React.FC = () => {
       </div>
     );
   }
-  
+
 
   const filteredTodos = getFilteredTodos(todos, filterBy);
 
@@ -323,7 +335,8 @@ export const App: React.FC = () => {
           handleUpdateTodo={handleUpdateTodo}
           loadingTodoId={loadingTodoId}
           handleToggleTodo={handleToggleTodo}
-          // completedAll={completedAll}
+          toggleId={toggleId}
+          updatingTodos={updatingTodos}
         />
         {!!todos.length && (
           <Footer
